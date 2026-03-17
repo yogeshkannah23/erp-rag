@@ -183,3 +183,78 @@ def health():
         "status": "ok" if milvus_ok else "degraded",
         "milvus": {"connected": milvus_ok, "detail": milvus_msg},
     }
+
+
+@app.get("/milvus-probe")
+def milvus_probe():
+    """
+    Try every likely Milvus hostname/IP and return which ones are reachable.
+    Useful for debugging ConnectionNotExistException in Docker / ERP setups.
+    """
+    import os
+    import socket
+    from pymilvus import connections as pym_connections, utility
+
+    port = int(os.getenv("MILVUS_PORT", "19530"))
+
+    candidates = [
+        os.getenv("MILVUS_HOST", "localhost"),   # whatever is in .env
+        "localhost",
+        "127.0.0.1",
+        "milvus",                                 # docker-compose service name
+        "milvus-standalone",
+        "54.221.211.87"
+        # container_name in docker-compose
+    ]
+    # deduplicate while preserving order
+    seen: set = set()
+    unique_candidates = []
+    for h in candidates:
+        h = h.strip()
+        if h and h not in seen:
+            seen.add(h)
+            unique_candidates.append(h)
+
+    results = []
+    first_working: Optional[dict] = None
+
+    for host in unique_candidates:
+        alias = f"probe_{host.replace('.', '_').replace('-', '_')}"
+        entry: dict = {"host": host, "port": port, "connected": False, "error": None, "collections": None}
+
+        # fast TCP check first
+        try:
+            sock = socket.create_connection((host, port), timeout=3)
+            sock.close()
+        except Exception as tcp_err:
+            entry["error"] = f"TCP unreachable — {tcp_err}"
+            results.append(entry)
+            continue
+
+        # full pymilvus gRPC handshake
+        try:
+            pym_connections.connect(alias=alias, host=host, port=port, timeout=5)
+            cols = utility.list_collections(using=alias)
+            pym_connections.disconnect(alias)
+            entry["connected"] = True
+            entry["collections"] = cols
+            if first_working is None:
+                first_working = {"host": host, "port": port}
+        except Exception as e:
+            entry["error"] = str(e)
+            try:
+                pym_connections.disconnect(alias)
+            except Exception:
+                pass
+
+        results.append(entry)
+
+    return {
+        "first_working": first_working,
+        "probe_results": results,
+        "hint": (
+            f"Set MILVUS_HOST={first_working['host']} in your .env"
+            if first_working else
+            "No working connection found — is Milvus running and on the same Docker network?"
+        ),
+    }
