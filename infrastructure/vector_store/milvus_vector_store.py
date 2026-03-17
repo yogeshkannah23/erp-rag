@@ -20,28 +20,33 @@ class MilvusVectorStore(VectorStorePort):
     def __init__(self):
         logger.info("[MilvusVectorStore] Initializing — loading embedding model")
         self._embeddings = HuggingFaceEmbeddings()
-        self._stores: dict = {}
         logger.info("[MilvusVectorStore] Ready")
 
     def _get_store(self, collection: str) -> Milvus:
-        if collection not in self._stores:
-            conn_args = config.get_milvus_connection_args()
-            logger.info(f"[MilvusVectorStore] Connecting to {conn_args} for collection '{collection}'")
-            try:
-                self._stores[collection] = Milvus(
-                    embedding_function=self._embeddings,
-                    collection_name=collection,
-                    connection_args=conn_args,
-                    auto_id=True,
-                )
-                logger.info(f"[MilvusVectorStore] Store created for '{collection}'")
-            except Exception as e:
-                logger.error(
-                    f"[MilvusVectorStore] Failed to create store for '{collection}': {e}\n"
-                    f"{traceback.format_exc()}"
-                )
-                raise
-        return self._stores[collection]
+        """Always creates a fresh Milvus instance to avoid stale connection issues."""
+        from pymilvus import MilvusClient as PyMilvusClient, connections
+        conn_args = config.get_milvus_connection_args()
+        logger.info(f"[MilvusVectorStore] Connecting to {conn_args} for collection '{collection}'")
+        try:
+            _pre_client = PyMilvusClient(**conn_args)
+            _alias = _pre_client._using
+            if not connections.has_connection(_alias):
+                connections.connect(alias=_alias, **conn_args)
+
+            store = Milvus(
+                embedding_function=self._embeddings,
+                collection_name=collection,
+                connection_args=conn_args,
+                auto_id=True,
+            )
+            logger.info(f"[MilvusVectorStore] Store ready for '{collection}'")
+            return store
+        except Exception as e:
+            logger.error(
+                f"[MilvusVectorStore] Failed to create store for '{collection}': {e}\n"
+                f"{traceback.format_exc()}"
+            )
+            raise
 
     def add_documents(self, collection: str, chunks: List[Chunk]) -> List[str]:
         if not chunks:

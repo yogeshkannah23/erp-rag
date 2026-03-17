@@ -3,6 +3,7 @@ Use Case: QueryRagUseCase
 Classifies the query → searches relevant collections → generates an LLM answer.
 """
 import logging
+import re
 from typing import List, Optional
 
 import config
@@ -12,6 +13,19 @@ from domain.ports.llm_port import LLMPort
 from domain.ports.vector_store_port import VectorStorePort
 
 logger = logging.getLogger(__name__)
+
+_GREETING_PATTERN = re.compile(
+    r"^\s*(hi|hello|hey|howdy|greetings|good\s+(morning|afternoon|evening|day)|"
+    r"what'?s?\s+up|how\s+are\s+you|how\s+r\s+u|namaste|hola|yo)[!?,.\s]*$",
+    re.IGNORECASE,
+)
+
+_GREETING_RESPONSE = (
+    "Hello! I'm your technical knowledge assistant. "
+    "Ask me anything about our projects — for example: "
+    "\"What AI projects have we done?\", \"Show me Migration case studies\", "
+    "or \"Which projects used React?\"."
+)
 
 
 class QueryRagUseCase:
@@ -31,14 +45,18 @@ class QueryRagUseCase:
         available_domains: Optional[List[str]] = None,
         k: int = 5,
     ) -> QueryResult:
+        if _GREETING_PATTERN.match(question):
+            return QueryResult(answer=_GREETING_RESPONSE, sources=[], extracted_tags={})
+
         domain_info = self._classifier.classify(question, available_domains)
         domains = domain_info.get("domains", [])
 
         if not domains:
             return QueryResult(
                 answer=(
-                    "I couldn't identify a relevant domain for your query. "
-                    "Please mention the technology area (e.g. Migration, AI, Security)."
+                    "I couldn't find a relevant domain for your query. "
+                    "Try mentioning a technology area such as Migration, AI, Security, "
+                    "Frontend, Backend, or DevOps."
                 ),
                 sources=[],
                 extracted_tags={},
