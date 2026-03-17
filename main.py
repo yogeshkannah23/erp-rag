@@ -11,6 +11,7 @@ Environment variables required:
   OPENAI_API_KEY         — OpenAI key for LLM
   HUGGINGFACE_API_TOKEN  — HuggingFace token for embeddings
   MILVUS_HOST            — Milvus hostname (default: localhost)
+  MILVUS_PORT            — Milvus gRPC port (default: 19530)
 """
 import base64
 import logging
@@ -23,7 +24,7 @@ from pydantic import BaseModel
 from langchain_core.documents import Document
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import get_collection_name
+from config import get_collection_name, check_milvus_connection
 from services.pdf_processor import PDFProcessor
 from services.vector_store_service import VectorStoreService
 from core.rag_engine import RAGEngine
@@ -32,6 +33,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="PDF Vector Service", version="1.0.0")
+
+
+@app.on_event("startup")
+def startup_check():
+    ok, msg = check_milvus_connection()
+    if ok:
+        logger.info(f"[Startup] {msg}")
+    else:
+        logger.error(f"[Startup] {msg}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -168,4 +178,8 @@ def ask(request: ChatRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    milvus_ok, milvus_msg = check_milvus_connection()
+    return {
+        "status": "ok" if milvus_ok else "degraded",
+        "milvus": {"connected": milvus_ok, "detail": milvus_msg},
+    }

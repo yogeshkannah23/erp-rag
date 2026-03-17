@@ -1,8 +1,85 @@
+version: '3.8'
+
 services:
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: milvus-etcd
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: 1000
+      ETCD_QUOTA_BACKEND_BYTES: 4294967296
+    command: >
+      etcd
+      --advertise-client-urls http://etcd:2379
+      --listen-client-urls http://0.0.0.0:2379
+      --data-dir /etcd
+    volumes:
+      - etcd-data:/etcd
+    networks:
+      - milvus-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: milvus-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    networks:
+      - milvus-net
+
+  milvus:
+    image: milvusdb/milvus:v2.3.3
+    container_name: milvus-standalone
+    depends_on:
+      - etcd
+      - minio
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    command: ["milvus", "run", "standalone"]
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    networks:
+      - milvus-net
+
+  attu:
+    image: zilliz/attu:latest
+    container_name: attu
+    depends_on:
+      - milvus
+    environment:
+      MILVUS_ADDRESS: milvus-standalone:19530
+    ports:
+      - "3000:3000"
+    networks:
+      - milvus-net
+
   pdf-vector-service:
     build: .
+    container_name: erp-rag-app
+    depends_on:
+      - milvus
     ports:
       - "8000:8000"
     env_file:
       - .env
     restart: unless-stopped
+    networks:
+      - milvus-net
+
+volumes:
+  etcd-data:
+  minio-data:
+
+networks:
+  milvus-net:

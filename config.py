@@ -29,11 +29,23 @@ MAX_TOTAL_CHUNKS: int = 20
 DEFAULT_DOMAINS = ["Migration", "Security", "AI", "Frontend", "Backend", "DevOps"]
 
 # ── Milvus ─────────────────────────────────────────────────────────────────────
-MILVUS_HOST: str = os.getenv("MILVUS_HOST", "localhost")
-MILVUS_PORT: int = int(os.getenv("MILVUS_PORT", "19530"))
-
 def get_milvus_connection_args() -> dict:
-    return {"host": MILVUS_HOST.strip(), "port": MILVUS_PORT}
+    host = os.getenv("MILVUS_HOST", "localhost").strip()
+    port = int(os.getenv("MILVUS_PORT", "19530"))
+    return {"host": host, "port": port}
+
+def check_milvus_connection() -> tuple[bool, str]:
+    """Returns (ok, message). Tries a live gRPC connection to Milvus."""
+    from pymilvus import connections, utility
+    args = get_milvus_connection_args()
+    alias = "health_check"
+    try:
+        connections.connect(alias=alias, host=args["host"], port=args["port"], timeout=5)
+        utility.list_collections(using=alias)
+        connections.disconnect(alias)
+        return True, f"Connected to Milvus at {args['host']}:{args['port']}"
+    except Exception as e:
+        return False, f"Milvus unreachable at {args['host']}:{args['port']} — {e}"
 
 def get_collection_name(domain: str) -> str:
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', domain.lower())

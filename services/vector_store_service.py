@@ -29,8 +29,8 @@ class VectorStoreService:
             )
             try:
                 store._collection.load()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[Milvus] Collection load skipped (may not exist yet) → {collection_name}: {e}")
             self._stores[collection_name] = store
             logger.info(f"[Milvus] Connected → {collection_name}")
         return self._stores[collection_name]
