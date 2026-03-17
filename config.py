@@ -30,10 +30,10 @@ DEFAULT_DOMAINS = ["Migration", "Security", "AI", "Frontend", "Backend", "DevOps
 
 # ── Milvus ─────────────────────────────────────────────────────────────────────
 MILVUS_HOST: str = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT: int = int(os.getenv("MILVUS_PORT", "19530"))
 
-def get_milvus_uri() -> str:
-    host = MILVUS_HOST.strip().rstrip("/")
-    return f"http://{host}:19530"
+def get_milvus_connection_args() -> dict:
+    return {"host": MILVUS_HOST.strip(), "port": MILVUS_PORT}
 
 def get_collection_name(domain: str) -> str:
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', domain.lower())

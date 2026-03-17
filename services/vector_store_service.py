@@ -8,7 +8,7 @@ from typing import List, Optional
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
 
-from config import get_milvus_uri, get_collection_name
+from config import get_milvus_connection_args, get_collection_name
 from .embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -21,11 +21,10 @@ class VectorStoreService:
 
     def get_vectorstore(self, collection_name: str) -> Milvus:
         if collection_name not in self._stores:
-            uri = get_milvus_uri()
             store = Milvus(
                 embedding_function=self.embeddings,
                 collection_name=collection_name,
-                connection_args={"uri": uri},
+                connection_args=get_milvus_connection_args(),
                 auto_id=True,
             )
             try:
