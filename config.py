@@ -30,8 +30,8 @@ DEFAULT_DOMAINS = ["Migration", "Security", "AI", "Frontend", "Backend", "DevOps
 
 # ── Milvus ─────────────────────────────────────────────────────────────────────
 def get_milvus_connection_args() -> dict:
-    host = os.getenv("MILVUS_HOST", "localhost").strip()
-    port = int(os.getenv("MILVUS_PORT", "19530"))
+    host = os.getenv("MILVUS_HOST", "milvus").strip()
+    port = os.getenv("MILVUS_PORT", "19530")
     return {"host": host, "port": port}
 
 def check_milvus_connection() -> tuple[bool, str]:
